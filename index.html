@@ -102,7 +102,7 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
 <div class="page active" id="page-add">
   <div class="card" style="background:#fff9f0;border:2px solid #f0c080">
     <div style="font-size:14px;color:#c4561a;font-weight:600;margin-bottom:8px">🎤 语音记账 — 点下方输入框，用键盘上的麦克风说话</div>
-    <input type="text" id="voiceInput" placeholder="点这里→按键盘🎤→说话，如：粤B12345 沙河 3车"
+    <input type="text" id="voiceInput" placeholder="点这里→按键盘🎤→说话，如：22355 电厂三期 2车单价100元"
       style="width:100%;padding:14px;border:2px solid #c4561a;border-radius:10px;font-size:17px;text-align:center;background:#fff;color:#3d3226;outline:none"
       autocomplete="off">
     <div style="text-align:center;margin-top:8px;font-size:13px;color:#8b7355" id="parseHint"></div>
@@ -137,6 +137,8 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
     </div>
     <button class="btn btn-primary" onclick="addRecord()">✅ 记一笔</button>
   </div>
+
+  <div class="card" id="todayPreview" style="display:none"></div>
 </div>
 
 <!-- 记录页 -->
@@ -187,6 +189,7 @@ switchTab('add');
 updateTotalEarnings();
 updatePlateChips();
 updateLocationChips();
+renderTodayPreview();
 
 // ===== 标签切换 =====
 function switchTab(name){
@@ -303,7 +306,12 @@ function parseVoice(rawText){
   // ===== 1. 提取车牌 =====
   const provinceChars = '京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁港澳';
   let plate = '';
-  const plateMatch = text.match(new RegExp('(['+provinceChars+'])([A-Za-z][A-Za-z0-9]{4,7})'));
+  // 先尝试完整车牌格式: 省份+字母+数字字母
+  let plateMatch = text.match(new RegExp('^(['+provinceChars+'])[A-Za-z][A-Za-z0-9]{4,7}'));
+  // 再尝试纯数字/字母车牌(4-8位)
+  if(!plateMatch){
+    plateMatch = text.match(/^([A-Za-z0-9]{4,8})/);
+  }
   if(plateMatch){
     plate = plateMatch[0];
     text = text.replace(plate, '');
@@ -460,17 +468,58 @@ function addRecord(){
   const plates = getPlates();
   if(!plates.includes(plate)){plates.push(plate);plates.sort();savePlates(plates)}
 
-  // 清空输入
+  // 完全清空，恢复初始状态
   document.getElementById('voiceInput').value = '';
   document.getElementById('parseHint').textContent = '';
   document.getElementById('plateInput').value = '';
+  document.getElementById('locationInput').value = '';
+  document.getElementById('unitPriceInput').value = '';
   curPlate = '';
+  curLocation = '';
+  curUnitPrice = 0;
+  curTrips = 1;
+  document.getElementById('tripDisplay').textContent = '1';
+  document.getElementById('amountDisplay').textContent = '¥0';
+  updatePlateChips();
+  updateLocationChips();
+  updateTotalEarnings();
+  renderTodayPreview();
+  // 显示"再来一车"快捷按钮
+  const hint = document.getElementById('parseHint');
+  hint.innerHTML = '✅ 已记录：'+plate+' '+loc+' '+trips+'车 ¥'+amount+' &nbsp; <button onclick="quickRepeat(\''+plate.replace(/'/g,"\\'")+'\',\''+loc.replace(/'/g,"\\'")+'\','+unitPrice+')" style="background:#c4561a;color:#fff;border:none;border-radius:14px;padding:4px 12px;font-size:13px;cursor:pointer">再来一车</button>';
+  hint.style.color = '#4CAF50';
+}
+
+function quickRepeat(plate, loc, price){
+  selectPlate(plate);
+  document.getElementById('plateInput').value = plate;
+  selectLocation(loc);
   curTrips = 1;
   document.getElementById('tripDisplay').textContent = '1';
   updateAmountDisplay();
-  updatePlateChips();
-  updateTotalEarnings();
-  showToast('✅ 已记录：'+plate+' '+loc+' '+trips+'车 ¥'+amount);
+  document.getElementById('parseHint').innerHTML = '✅ 已填入：<b>'+plate+'</b> '+loc+' 1车 ¥'+price+' — 可调整车次后点"记一笔"';
+  document.getElementById('parseHint').style.color = '#4CAF50';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ===== 今日记录预览 =====
+function renderTodayPreview(){
+  const today = new Date().toISOString().split('T')[0];
+  const records = getRecords().filter(r=>r.date===today);
+  const container = document.getElementById('todayPreview');
+  if(!container) return;
+  if(records.length===0){
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  container.style.display = 'block';
+  records.sort((a,b)=>b.id-a.id);
+  const total = records.reduce((s,r)=>s+r.amount,0);
+  const totalTrips = records.reduce((s,r)=>s+r.trips,0);
+  const latest = records.slice(0,3);
+  container.innerHTML = '<div style="font-size:14px;font-weight:600;color:#8b7355;margin-bottom:6px">📋 今日已记 '+totalTrips+'车 ¥'+total+'</div>'
+    + latest.map(r=>'<div style="font-size:13px;color:#8b7355;padding:3px 0;border-bottom:1px solid #f5f0e8">'+r.plate+' '+r.location+' '+r.trips+'车 ¥'+r.amount.toFixed(0)+'</div>').join('');
 }
 
 function deleteRecord(id){
@@ -479,6 +528,7 @@ function deleteRecord(id){
   saveRecords(records);
   renderRecords();
   updateTotalEarnings();
+  renderTodayPreview();
   showToast('已删除');
 }
 
