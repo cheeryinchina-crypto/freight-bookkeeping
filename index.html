@@ -108,34 +108,30 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
     <div style="text-align:center;margin-top:8px;font-size:13px;color:#8b7355" id="parseHint"></div>
   </div>
 
-  <div class="card">
-    <div style="font-size:16px;font-weight:600;margin-bottom:10px;color:#3d3226">✍️ 手动填写确认</div>
-
-    <label style="font-size:14px;color:#8b7355;font-weight:500">车牌号</label>
-    <div class="driver-chips" id="plateChips"></div>
-    <input type="text" id="plateInput" placeholder="输入车牌号" style="width:100%;padding:10px;border:2px solid #e0d5c5;border-radius:10px;font-size:16px;margin-bottom:12px;background:#faf8f5;outline:none">
-
-    <label style="font-size:14px;color:#8b7355;font-weight:500">拉货地点</label>
-    <div class="driver-chips" id="locationChips"></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <input type="text" id="locationInput" placeholder="新地点名称" style="flex:1;padding:10px;border:2px solid #e0d5c5;border-radius:10px;font-size:15px;background:#faf8f5;outline:none">
-      <input type="number" id="unitPriceInput" placeholder="单价(元)" style="width:90px;padding:10px;border:2px solid #e0d5c5;border-radius:10px;font-size:15px;background:#faf8f5;outline:none" inputmode="numeric">
-      <button class="btn btn-sm btn-outline" onclick="addLocation()" style="white-space:nowrap">保存地点</button>
+  <div class="card" style="padding:12px">
+    <div class="driver-chips" id="plateChips" style="margin-bottom:6px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="text" id="plateInput" placeholder="车牌号" style="flex:1;padding:8px 10px;border:2px solid #e0d5c5;border-radius:8px;font-size:15px;background:#faf8f5;outline:none">
     </div>
 
-    <div class="trip-row" style="justify-content:center">
-      <label style="margin-right:6px">车次：</label>
-      <div class="trip-btn" onclick="changeTrips(-1)">−</div>
-      <div class="trip-num" id="tripDisplay">1</div>
-      <div class="trip-btn" onclick="changeTrips(1)">+</div>
+    <div class="driver-chips" id="locationChips" style="margin-bottom:6px"></div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;align-items:center">
+      <input type="text" id="locationInput" placeholder="新地点" style="flex:1;padding:8px 10px;border:2px solid #e0d5c5;border-radius:8px;font-size:14px;background:#faf8f5;outline:none">
+      <input type="number" id="unitPriceInput" placeholder="单价" style="width:62px;padding:8px 6px;border:2px solid #e0d5c5;border-radius:8px;font-size:14px;background:#faf8f5;outline:none" inputmode="numeric">
+      <button class="btn btn-sm btn-outline" onclick="addLocation()" style="padding:6px 10px;font-size:12px;min-height:32px">保存</button>
     </div>
-    <div style="text-align:center;font-size:30px;font-weight:700;color:#c4561a;margin:8px 0" id="amountDisplay">¥0</div>
 
-    <div class="input-group">
-      <label>日期</label>
-      <input type="date" id="recordDate">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center">
+        <span style="font-size:13px;color:#8b7355;margin-right:4px">车次</span>
+        <div class="trip-btn" onclick="changeTrips(-1)" style="width:32px;height:32px;font-size:18px">−</div>
+        <span class="trip-num" id="tripDisplay" style="font-size:18px;margin:0 8px">1</span>
+        <div class="trip-btn" onclick="changeTrips(1)" style="width:32px;height:32px;font-size:18px">+</div>
+      </div>
+      <div style="font-size:24px;font-weight:700;color:#c4561a" id="amountDisplay">¥0</div>
+      <input type="date" id="recordDate" style="width:110px;padding:6px;border:1px solid #e0d5c5;border-radius:6px;font-size:13px;background:#faf8f5">
     </div>
-    <button class="btn btn-primary" onclick="addRecord()">✅ 记一笔</button>
+    <button class="btn btn-primary" onclick="addRecord()" style="font-size:16px;padding:10px">✅ 记一笔</button>
   </div>
 
   <div class="card" id="todayPreview" style="display:none"></div>
@@ -299,7 +295,7 @@ document.getElementById('voiceInput').addEventListener('input', function(){
   const text = this.value.trim();
   if(!text){ document.getElementById('parseHint').textContent = ''; return; }
   clearTimeout(parseTimer);
-  parseTimer = setTimeout(()=>{ parseVoice(text); }, 600);
+  parseTimer = setTimeout(()=>{ parseVoice(text); }, 300);
 });
 
 document.getElementById('plateInput').addEventListener('input', function(){
@@ -332,10 +328,10 @@ function parseVoice(rawText){
   const provinceChars = '京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁港澳';
   let plate = '';
   // 先尝试完整车牌格式: 省份+字母+数字字母
-  let plateMatch = text.match(new RegExp('^(['+provinceChars+'])[A-Za-z][A-Za-z0-9]{4,7}'));
-  // 再尝试纯数字/字母车牌(4-8位)
+  let plateMatch = text.match(new RegExp('^(['+provinceChars+'])[A-Za-z][A-Za-z0-9]{3,7}'));
+  // 再尝试纯数字/字母车牌(3-8位)
   if(!plateMatch){
-    plateMatch = text.match(/^([A-Za-z0-9]{4,8})/);
+    plateMatch = text.match(/^([A-Za-z0-9]{3,8})/);
   }
   if(plateMatch){
     plate = plateMatch[0];
@@ -509,22 +505,9 @@ function addRecord(){
   updateLocationChips();
   updateTotalEarnings();
   renderTodayPreview();
-  // 显示"再来一车"快捷按钮
   const hint = document.getElementById('parseHint');
-  hint.innerHTML = '✅ 已记录：'+plate+' '+loc+' '+trips+'车 ¥'+amount+' &nbsp; <button onclick="quickRepeat(\''+plate.replace(/'/g,"\\'")+'\',\''+loc.replace(/'/g,"\\'")+'\','+unitPrice+')" style="background:#c4561a;color:#fff;border:none;border-radius:14px;padding:4px 12px;font-size:13px;cursor:pointer">再来一车</button>';
+  hint.innerHTML = '✅ 已记录：'+plate+' '+loc+' '+trips+'车 ¥'+amount;
   hint.style.color = '#4CAF50';
-}
-
-function quickRepeat(plate, loc, price){
-  selectPlate(plate);
-  document.getElementById('plateInput').value = plate;
-  selectLocation(loc);
-  curTrips = 1;
-  document.getElementById('tripDisplay').textContent = '1';
-  updateAmountDisplay();
-  document.getElementById('parseHint').innerHTML = '✅ 已填入：<b>'+plate+'</b> '+loc+' 1车 ¥'+price+' — 可调整车次后点"记一笔"';
-  document.getElementById('parseHint').style.color = '#4CAF50';
-  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 // ===== 今日记录预览 =====
@@ -608,7 +591,6 @@ function renderSummary(){
     return;
   }
 
-  // 按地点分组，每个地点内按车牌汇总
   const byLocation = {};
   records.forEach(r=>{
     if(!byLocation[r.location]) byLocation[r.location] = {trips:0,amount:0,plates:{}};
@@ -619,40 +601,44 @@ function renderSummary(){
     byLocation[r.location].plates[r.plate].amount += r.amount;
   });
 
-  // 本月汇总
   const now = new Date();
   const thisMonth = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const monthRecords = records.filter(r=>r.date.startsWith(thisMonth));
   const monthTotal = monthRecords.reduce((s,r)=>s+r.amount,0);
   const monthTrips = monthRecords.reduce((s,r)=>s+r.trips,0);
 
+  const allTotal = records.reduce((s,r)=>s+r.amount,0);
+  const allTrips = records.reduce((s,r)=>s+r.trips,0);
+
   let html = '';
 
   // 本月概览
-  html += '<div class="summary-block"><h3>📅 本月概览（'+thisMonth+'）</h3>';
-  html += '<div class="summary-row"><span>总车次</span><span>'+monthTrips+' 车</span></div>';
-  html += '<div class="summary-row total"><span>本月合计</span><span>¥'+monthTotal.toFixed(0)+'</span></div>';
-  html += '</div>';
+  html += '<div style="background:#fff9f0;border:1px solid #f0c080;border-radius:10px;padding:12px;margin-bottom:14px;text-align:center">';
+  html += '<div style="font-size:13px;color:#8b7355">'+thisMonth+' 本月</div>';
+  html += '<div style="display:flex;justify-content:center;gap:24px;margin-top:6px">';
+  html += '<div><span style="font-size:12px;color:#8b7355">车次</span><br><span style="font-size:20px;font-weight:700;color:#3d3226">'+monthTrips+'</span></div>';
+  html += '<div><span style="font-size:12px;color:#8b7355">金额</span><br><span style="font-size:20px;font-weight:700;color:#c4561a">¥'+monthTotal.toFixed(0)+'</span></div>';
+  html += '</div></div>';
 
-  // 按地点汇总
+  // 按地点汇总 - 表格形式
   Object.entries(byLocation).sort((a,b)=>b[1].amount-a[1].amount).forEach(([loc,data])=>{
     const locs = getLocations();
     const price = locs[loc]||'?';
-    html += '<div class="summary-block"><h3>📍 '+loc+'（单价¥'+price+'）</h3>';
-    html += '<div class="summary-row"><span>总车次</span><span>'+data.trips+' 车</span></div>';
-    html += '<div class="summary-row"><span>总金额</span><span>¥'+data.amount.toFixed(0)+'</span></div>';
-    // 按车牌
+    html += '<div class="summary-block"><h3>📍 '+loc+' <span style="font-size:13px;font-weight:400;color:#8b7355">单价¥'+price+'</span></h3>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:14px">';
+    html += '<thead><tr style="color:#8b7355;font-size:12px"><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #e0d5c5">车牌</th><th style="text-align:center;padding:4px 8px;border-bottom:1px solid #e0d5c5">车次</th><th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0d5c5">金额</th></tr></thead>';
+    html += '<tbody>';
     Object.entries(data.plates).sort((a,b)=>b[1].amount-a[1].amount).forEach(([plate,pd])=>{
-      html += '<div class="summary-row" style="padding-left:12px;font-size:14px"><span>🚛 '+plate+'</span><span>'+pd.trips+'车 · ¥'+pd.amount.toFixed(0)+'</span></div>';
+      html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f5f0e8">'+plate+'</td><td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f5f0e8">'+pd.trips+'车</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #f5f0e8;font-weight:600">¥'+pd.amount.toFixed(0)+'</td></tr>';
     });
-    html += '</div>';
+    html += '<tr style="font-weight:700;color:#c4561a"><td style="padding:6px 8px">小计</td><td style="text-align:center;padding:6px 8px">'+data.trips+'车</td><td style="text-align:right;padding:6px 8px">¥'+data.amount.toFixed(0)+'</td></tr>';
+    html += '</tbody></table></div>';
   });
 
   // 全部合计
-  const allTotal = records.reduce((s,r)=>s+r.amount,0);
-  const allTrips = records.reduce((s,r)=>s+r.trips,0);
-  html += '<div class="summary-block"><h3>📊 全部合计</h3>';
-  html += '<div class="summary-row total"><span>总计</span><span>'+allTrips+'车 · ¥'+allTotal.toFixed(0)+'</span></div>';
+  html += '<div style="background:#faf8f5;border-radius:10px;padding:14px;text-align:center">';
+  html += '<div style="font-size:14px;color:#8b7355;margin-bottom:4px">全部历史合计</div>';
+  html += '<div style="font-size:22px;font-weight:700;color:#c4561a">'+allTrips+'车 · ¥'+allTotal.toFixed(0)+'</div>';
   html += '</div>';
 
   container.innerHTML = html;
