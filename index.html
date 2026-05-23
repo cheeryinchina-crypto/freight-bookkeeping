@@ -33,6 +33,24 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
 .btn-voice.recording{background:#f44336;animation:pulse .8s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
 
+.driver-chips{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.driver-chip{padding:10px 18px;background:#faf8f5;border:2px solid #e0d5c5;border-radius:22px;font-size:16px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.driver-chip:active{transform:scale(.95)}
+.driver-chip.selected{background:#c4561a;color:#fff;border-color:#c4561a}
+.driver-chip-new{border-style:dashed;color:#8b7355}
+
+.amount-area{margin-bottom:12px}
+.amount-area label{display:block;font-size:14px;color:#8b7355;margin-bottom:4px;font-weight:500}
+.amount-input-row{display:flex;align-items:center;gap:8px}
+.amount-input-row input{flex:1;padding:14px;border:2px solid #e0d5c5;border-radius:10px;font-size:22px;font-weight:700;text-align:center;background:#faf8f5;color:#3d3226;outline:none}
+.amount-input-row input:focus{border-color:#c4561a}
+
+.trip-row{display:flex;align-items:center;gap:0;margin-bottom:12px}
+.trip-row label{font-size:14px;color:#8b7355;font-weight:500;margin-right:10px}
+.trip-btn{width:40px;height:40px;border-radius:50%;border:2px solid #c4561a;background:#fff;color:#c4561a;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.trip-btn:active{background:#c4561a;color:#fff}
+.trip-num{font-size:22px;font-weight:700;margin:0 14px;min-width:30px;text-align:center}
+
 .input-group{margin-bottom:12px}
 .input-group label{display:block;font-size:14px;color:#8b7355;margin-bottom:4px;font-weight:500}
 .input-group input,.input-group select{width:100%;padding:12px 14px;border:2px solid #e0d5c5;border-radius:10px;font-size:17px;background:#faf8f5;color:#3d3226;outline:none;transition:border .2s}
@@ -82,13 +100,16 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
 
 <!-- 记账页 -->
 <div class="page active" id="page-add">
-  <div class="card">
-    <button type="button" class="btn btn-voice" id="voiceBtn">🎤 点击说话记账</button>
-    <div class="voice-text" id="voiceText">说出如：张三 3车 450元</div>
+  <div class="card" style="background:#fff9f0;border:2px solid #f0c080">
+    <div style="font-size:14px;color:#c4561a;font-weight:600;margin-bottom:8px">🎤 语音记账 — 点下方输入框，用键盘上的麦克风说话</div>
+    <input type="text" id="voiceInput" placeholder="点这里→按键盘🎤→说话，如：张三3车450元"
+      style="width:100%;padding:14px;border:2px solid #c4561a;border-radius:10px;font-size:18px;text-align:center;background:#fff;color:#3d3226;outline:none"
+      autocomplete="off">
+    <div style="text-align:center;margin-top:8px;font-size:13px;color:#8b7355" id="parseHint"></div>
   </div>
 
   <div class="card">
-    <div style="font-size:16px;font-weight:600;margin-bottom:10px;color:#3d3226">✍️ 手动输入</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:10px;color:#3d3226">✍️ 手动修改确认</div>
     <div class="input-group">
       <label>司机姓名</label>
       <select id="driverName" onchange="handleCustomName()">
@@ -166,107 +187,21 @@ function switchTab(name){
   updateTotalEarnings();
 }
 
-// ===== 语音识别 =====
-let recognition = null;
-let isRecording = false;
+// ===== 语音输入（通过输入法自带语音） =====
+let parseTimer = null;
 
-function startVoice(){
-  if(!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)){
-    showToast('您的浏览器不支持语音输入，请手动输入');
+document.getElementById('voiceInput').addEventListener('input', function(){
+  const text = this.value.trim();
+  if(!text) {
+    document.getElementById('parseHint').textContent = '';
     return;
   }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  try {
-    recognition = new SR();
-  } catch(e) {
-    showToast('语音功能不可用，请手动输入');
-    return;
-  }
-  recognition.lang = 'zh-CN';
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = ()=>{
-    isRecording = true;
-    const btn = document.getElementById('voiceBtn');
-    btn.textContent = '🔴 正在聆听...点击停止';
-    btn.classList.add('recording');
-    document.getElementById('voiceText').textContent = '请说话...';
-  };
-
-  recognition.onresult = (e)=>{
-    let text = '';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      text += e.results[i][0].transcript;
-    }
-    document.getElementById('voiceText').textContent = text;
-    document.getElementById('voiceText').classList.add('has-content');
-  };
-
-  recognition.onend = ()=>{
-    stopVoice();
-    const vt = document.getElementById('voiceText');
-    const text = vt.textContent.trim();
-    if(text && text!=='请说话...' && text!=='说出如：张三 3车 450元'){
-      parseVoice(text);
-      // 2秒后恢复提示文字
-      setTimeout(()=>{
-        vt.textContent = '说出如：张三 3车 450元';
-        vt.classList.remove('has-content');
-      }, 2500);
-    }
-  };
-
-  recognition.onerror = (e)=>{
-    const err = e.error || '';
-    stopVoice();
-    if(err==='aborted') return;
-    if(err==='no-speech'){
-      showToast('未检测到语音，请对准话筒说话');
-    } else if(err==='not-allowed'){
-      showToast('麦克风权限未开启，请在浏览器设置中允许');
-    } else if(err==='audio-capture'){
-      showToast('未检测到麦克风设备');
-    } else if(err==='network'){
-      showToast('网络连接失败，语音识别需要联网');
-    } else if(err==='service-not-allowed'){
-      showToast('浏览器不允许使用语音服务，可能需HTTPS');
-    } else {
-      showToast('语音识别失败('+err+')，请手动输入');
-    }
-  };
-
-  try {
-    recognition.start();
-  } catch(e) {
-    isRecording = false;
-    const btn = document.getElementById('voiceBtn');
-    btn.textContent = '🎤 点击说话记账';
-    btn.classList.remove('recording');
-    recognition = null;
-    showToast('语音启动失败，请检查浏览器权限或使用手动输入');
-  }
-}
-
-function stopVoice(){
-  isRecording = false;
-  const btn = document.getElementById('voiceBtn');
-  btn.textContent = '🎤 点击说话记账';
-  btn.classList.remove('recording');
-  if(recognition){
-    try { recognition.stop(); } catch(e) {}
-    recognition = null;
-  }
-}
-
-function toggleVoice(){
-  if(isRecording){
-    stopVoice();
-  } else {
-    startVoice();
-  }
-}
+  // 延迟解析，等输入法语音输入完
+  clearTimeout(parseTimer);
+  parseTimer = setTimeout(()=>{
+    parseVoice(text);
+  }, 600);
+});
 
 // 中文数字转换
 const CN_NUM = {'零':0,'一':1,'二':2,'两':3,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'百':100,'千':1000,'万':10000};
@@ -282,13 +217,13 @@ function parseChineseNumber(s){
 }
 
 function parseVoice(text){
-  // 先清理文本：移除多余空格和标点
+  // 先清理文本
   text = text.replace(/[，。！？、\s]+/g,' ').trim();
 
   // 模式1: "张三 3车 450元" 或 "张三3车450"
   let match = text.match(/(.+)[\s]*(\d+)\s*[车趟次]\s*(\d+)\s*[元块]?/);
   if(!match){
-    // 模式2: 包含中文数字 "张三 三车 四百五"
+    // 模式2: 中文数字 "张三 三车 四百五"
     match = text.match(/(.+)[\s]*([一二两三四五六七八九十\d]+)\s*[车趟次]\s*([一二两三四五六七八九十百千\d]+)\s*[元块]?/);
     if(match){
       match[2] = parseChineseNumber(match[2]);
@@ -300,35 +235,18 @@ function parseVoice(text){
     const trips = parseInt(match[2]);
     const amount = parseInt(match[3]);
 
-    // 显示识别结果
-    document.getElementById('voiceText').textContent = name + ' ' + trips + '车 ' + amount + '元';
-    document.getElementById('voiceText').classList.add('has-content');
+    // 填入表单
+    document.getElementById('driverNameCustom').value = name;
+    document.getElementById('driverNameCustom').style.display = 'block';
+    document.getElementById('driverName').value = '';
+    document.getElementById('tripCount').value = trips;
+    document.getElementById('totalAmount').value = amount;
 
-    // 自动保存
-    const date = document.getElementById('recordDate').value;
-    const records = getRecords();
-    records.push({
-      id: Date.now(),
-      name: name,
-      trips: trips,
-      amount: amount,
-      date: date,
-      createdAt: new Date().toISOString()
-    });
-    saveRecords(records);
-
-    // 保存司机名
-    const drivers = getDrivers();
-    if(!drivers.includes(name)){drivers.push(name);drivers.sort();saveDrivers(drivers)}
-
-    updateDriverSelect();
-    updateTotalEarnings();
-    showToast('✅ 已记录：'+name+' '+trips+'车 ¥'+amount);
+    document.getElementById('parseHint').innerHTML = '✅ 已识别：<b>'+name+'</b> '+trips+'车 ¥'+amount+' — 请核对后点下方"记一笔"';
+    document.getElementById('parseHint').style.color = '#4CAF50';
   } else {
-    // 完全匹配不上时，直接把整段话显示出来让用户手动输入
-    document.getElementById('voiceText').textContent = text || '未能识别';
-    document.getElementById('voiceText').classList.add('has-content');
-    showToast('未能识别格式，请说"姓名 几车 多少钱"，当前内容已填入可手动修改');
+    document.getElementById('parseHint').textContent = '未能识别格式，请手动填写下方信息';
+    document.getElementById('parseHint').style.color = '#e8783b';
   }
 }
 
@@ -393,12 +311,12 @@ function addRecord(){
   if(!drivers.includes(name)){drivers.push(name);drivers.sort();saveDrivers(drivers)}
 
   // 清空输入
+  document.getElementById('voiceInput').value = '';
+  document.getElementById('parseHint').textContent = '';
   document.getElementById('tripCount').value = '';
   document.getElementById('totalAmount').value = '';
   document.getElementById('driverNameCustom').value = '';
   document.getElementById('driverNameCustom').style.display = 'none';
-  document.getElementById('voiceText').textContent = '说出如：张三 3车 450元';
-  document.getElementById('voiceText').classList.remove('has-content');
   updateDriverSelect();
   updateTotalEarnings();
   showToast('✅ 已记录：'+name+' '+trips+'车 ¥'+amount);
@@ -529,9 +447,6 @@ function showToast(msg){
   document.body.appendChild(el);
   setTimeout(()=>el.remove(),2000);
 }
-
-// 语音按钮：点击切换开始/停止
-document.getElementById('voiceBtn').addEventListener('click', toggleVoice);
 
 </script>
 </body>
