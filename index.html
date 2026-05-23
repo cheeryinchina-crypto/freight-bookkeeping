@@ -209,7 +209,7 @@ function updatePlateChips(){
   const container = document.getElementById('plateChips');
   if(plates.length===0){ container.innerHTML=''; return; }
   container.innerHTML = plates.map(p=>
-    '<span class="driver-chip'+(p===curPlate?' selected':'')+'" onclick="selectPlate(\''+p.replace(/'/g,"\\'")+'\')">'+p+'</span>'
+    '<span class="driver-chip'+(p===curPlate?' selected':'')+'" onclick="selectPlate(\''+p.replace(/'/g,"\\'")+'\')">'+p+' <i onclick="event.stopPropagation();deletePlate(\''+p.replace(/'/g,"\\'")+'\')" style="font-style:normal;color:#ccc;margin-left:4px;font-size:14px;cursor:pointer">×</i></span>'
   ).join('');
 }
 
@@ -219,6 +219,18 @@ function selectPlate(plate){
   updatePlateChips();
 }
 
+function deletePlate(plate){
+  let plates = getPlates();
+  plates = plates.filter(p=>p!==plate);
+  savePlates(plates);
+  if(curPlate===plate){
+    curPlate = '';
+    document.getElementById('plateInput').value = '';
+  }
+  updatePlateChips();
+  showToast('已删除车牌：'+plate);
+}
+
 // ===== 地点快速选择 =====
 function updateLocationChips(){
   const locations = getLocations();
@@ -226,7 +238,7 @@ function updateLocationChips(){
   const names = Object.keys(locations);
   if(names.length===0){ container.innerHTML=''; return; }
   container.innerHTML = names.map(loc=>
-    '<span class="driver-chip'+(loc===curLocation?' selected':'')+'" onclick="selectLocation(\''+loc.replace(/'/g,"\\'")+'\')">'+loc+' <small style="opacity:.7">¥'+locations[loc]+'</small></span>'
+    '<span class="driver-chip'+(loc===curLocation?' selected':'')+'" onclick="selectLocation(\''+loc.replace(/'/g,"\\'")+'\')">'+loc+' <small style="opacity:.7">¥'+locations[loc]+'</small> <i onclick="event.stopPropagation();deleteLocation(\''+loc.replace(/'/g,"\\'")+'\')" style="font-style:normal;color:#ccc;margin-left:2px;font-size:14px;cursor:pointer">×</i></span>'
   ).join('');
 }
 
@@ -237,6 +249,19 @@ function selectLocation(loc){
   document.getElementById('unitPriceInput').value = '';
   updateLocationChips();
   updateAmountDisplay();
+}
+
+function deleteLocation(loc){
+  const locations = getLocations();
+  delete locations[loc];
+  saveLocations(locations);
+  if(curLocation===loc){
+    curLocation = '';
+    curUnitPrice = 0;
+    updateAmountDisplay();
+  }
+  updateLocationChips();
+  showToast('已删除地点：'+loc);
 }
 
 function addLocation(){
