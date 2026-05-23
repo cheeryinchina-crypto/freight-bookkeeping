@@ -206,9 +206,15 @@ function startVoice(){
 
   recognition.onend = ()=>{
     stopVoice();
-    const text = document.getElementById('voiceText').textContent.trim();
-    if(text && text!=='请说话...'){
+    const vt = document.getElementById('voiceText');
+    const text = vt.textContent.trim();
+    if(text && text!=='请说话...' && text!=='说出如：张三 3车 450元'){
       parseVoice(text);
+      // 2秒后恢复提示文字
+      setTimeout(()=>{
+        vt.textContent = '说出如：张三 3车 450元';
+        vt.classList.remove('has-content');
+      }, 2500);
     }
   };
 
@@ -276,26 +282,53 @@ function parseChineseNumber(s){
 }
 
 function parseVoice(text){
-  // 尝试匹配: 姓名 + 数字车 + 数字元
+  // 先清理文本：移除多余空格和标点
+  text = text.replace(/[，。！？、\s]+/g,' ').trim();
+
   // 模式1: "张三 3车 450元" 或 "张三3车450"
-  let match = text.match(/(.+?)[\s]*(\d+)\s*[车趟次]\s*(\d+)\s*[元块]?/);
+  let match = text.match(/(.+)[\s]*(\d+)\s*[车趟次]\s*(\d+)\s*[元块]?/);
   if(!match){
     // 模式2: 包含中文数字 "张三 三车 四百五"
-    match = text.match(/(.+?)[\s]*([一二两三四五六七八九十\d]+)\s*[车趟次]\s*([一二两三四五六七八九十百千\d]+)\s*[元块]?/);
+    match = text.match(/(.+)[\s]*([一二两三四五六七八九十\d]+)\s*[车趟次]\s*([一二两三四五六七八九十百千\d]+)\s*[元块]?/);
     if(match){
       match[2] = parseChineseNumber(match[2]);
       match[3] = parseChineseNumber(match[3]);
     }
   }
   if(match && match[2] && match[3]){
-    document.getElementById('driverNameCustom').value = match[1].trim();
-    document.getElementById('driverNameCustom').style.display = 'block';
-    document.getElementById('driverName').value = '';
-    document.getElementById('tripCount').value = parseInt(match[2]);
-    document.getElementById('totalAmount').value = parseInt(match[3]);
-    showToast('已识别：'+match[1].trim()+' '+match[2]+'车 '+match[3]+'元，请确认后点"记一笔"');
+    const name = match[1].trim();
+    const trips = parseInt(match[2]);
+    const amount = parseInt(match[3]);
+
+    // 显示识别结果
+    document.getElementById('voiceText').textContent = name + ' ' + trips + '车 ' + amount + '元';
+    document.getElementById('voiceText').classList.add('has-content');
+
+    // 自动保存
+    const date = document.getElementById('recordDate').value;
+    const records = getRecords();
+    records.push({
+      id: Date.now(),
+      name: name,
+      trips: trips,
+      amount: amount,
+      date: date,
+      createdAt: new Date().toISOString()
+    });
+    saveRecords(records);
+
+    // 保存司机名
+    const drivers = getDrivers();
+    if(!drivers.includes(name)){drivers.push(name);drivers.sort();saveDrivers(drivers)}
+
+    updateDriverSelect();
+    updateTotalEarnings();
+    showToast('✅ 已记录：'+name+' '+trips+'车 ¥'+amount);
   } else {
-    showToast('未能识别，请说"姓名 几车 多少钱"');
+    // 完全匹配不上时，直接把整段话显示出来让用户手动输入
+    document.getElementById('voiceText').textContent = text || '未能识别';
+    document.getElementById('voiceText').classList.add('has-content');
+    showToast('未能识别格式，请说"姓名 几车 多少钱"，当前内容已填入可手动修改');
   }
 }
 
