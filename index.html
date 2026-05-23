@@ -102,31 +102,35 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
 <div class="page active" id="page-add">
   <div class="card" style="background:#fff9f0;border:2px solid #f0c080">
     <div style="font-size:14px;color:#c4561a;font-weight:600;margin-bottom:8px">🎤 语音记账 — 点下方输入框，用键盘上的麦克风说话</div>
-    <input type="text" id="voiceInput" placeholder="点这里→按键盘🎤→说话，如：张三3车450元"
-      style="width:100%;padding:14px;border:2px solid #c4561a;border-radius:10px;font-size:18px;text-align:center;background:#fff;color:#3d3226;outline:none"
+    <input type="text" id="voiceInput" placeholder="点这里→按键盘🎤→说话，如：粤B12345 沙河 3车"
+      style="width:100%;padding:14px;border:2px solid #c4561a;border-radius:10px;font-size:17px;text-align:center;background:#fff;color:#3d3226;outline:none"
       autocomplete="off">
     <div style="text-align:center;margin-top:8px;font-size:13px;color:#8b7355" id="parseHint"></div>
   </div>
 
   <div class="card">
-    <div style="font-size:16px;font-weight:600;margin-bottom:10px;color:#3d3226">✍️ 手动修改确认</div>
-    <div class="input-group">
-      <label>司机姓名</label>
-      <select id="driverName" onchange="handleCustomName()">
-        <option value="">选择司机</option>
-      </select>
-      <input type="text" id="driverNameCustom" placeholder="或输入新名字" style="margin-top:6px;display:none">
+    <div style="font-size:16px;font-weight:600;margin-bottom:10px;color:#3d3226">✍️ 手动填写确认</div>
+
+    <label style="font-size:14px;color:#8b7355;font-weight:500">车牌号</label>
+    <div class="driver-chips" id="plateChips"></div>
+    <input type="text" id="plateInput" placeholder="输入车牌号" style="width:100%;padding:10px;border:2px solid #e0d5c5;border-radius:10px;font-size:16px;margin-bottom:12px;background:#faf8f5;outline:none">
+
+    <label style="font-size:14px;color:#8b7355;font-weight:500">拉货地点</label>
+    <div class="driver-chips" id="locationChips"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="locationInput" placeholder="新地点名称" style="flex:1;padding:10px;border:2px solid #e0d5c5;border-radius:10px;font-size:15px;background:#faf8f5;outline:none">
+      <input type="number" id="unitPriceInput" placeholder="单价(元)" style="width:90px;padding:10px;border:2px solid #e0d5c5;border-radius:10px;font-size:15px;background:#faf8f5;outline:none" inputmode="numeric">
+      <button class="btn btn-sm btn-outline" onclick="addLocation()" style="white-space:nowrap">保存地点</button>
     </div>
-    <div class="row">
-      <div class="input-group">
-        <label>车次（趟数）</label>
-        <input type="number" id="tripCount" placeholder="0" min="1" inputmode="numeric">
-      </div>
-      <div class="input-group">
-        <label>金额（元）</label>
-        <input type="number" id="totalAmount" placeholder="0" min="0" inputmode="numeric">
-      </div>
+
+    <div class="trip-row" style="justify-content:center">
+      <label style="margin-right:6px">车次：</label>
+      <div class="trip-btn" onclick="changeTrips(-1)">−</div>
+      <div class="trip-num" id="tripDisplay">1</div>
+      <div class="trip-btn" onclick="changeTrips(1)">+</div>
     </div>
+    <div style="text-align:center;font-size:30px;font-weight:700;color:#c4561a;margin:8px 0" id="amountDisplay">¥0</div>
+
     <div class="input-group">
       <label>日期</label>
       <input type="date" id="recordDate">
@@ -138,8 +142,8 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
 <!-- 记录页 -->
 <div class="page" id="page-list">
   <div class="filter-bar">
-    <select id="filterDriver" onchange="renderRecords()">
-      <option value="">全部司机</option>
+    <select id="filterLocation" onchange="renderRecords()">
+      <option value="">全部地点</option>
     </select>
     <input type="date" id="filterDate" onchange="renderRecords()">
     <button class="btn btn-sm btn-outline" onclick="clearFilter()">清除</button>
@@ -160,19 +164,29 @@ body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;c
 
 <script>
 // ===== 数据管理 =====
-const STORAGE_KEY = 'truck_bookkeeping';
-const DRIVERS_KEY = 'truck_drivers';
+const STORAGE_KEY = 'truck_bookkeeping_v2';
+const PLATES_KEY = 'truck_plates';
+const LOCATIONS_KEY = 'truck_locations';
 
 function getRecords(){return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}
 function saveRecords(r){localStorage.setItem(STORAGE_KEY,JSON.stringify(r))}
-function getDrivers(){return JSON.parse(localStorage.getItem(DRIVERS_KEY)||'[]')}
-function saveDrivers(d){localStorage.setItem(DRIVERS_KEY,JSON.stringify(d))}
+function getPlates(){return JSON.parse(localStorage.getItem(PLATES_KEY)||'[]')}
+function savePlates(d){localStorage.setItem(PLATES_KEY,JSON.stringify(d))}
+function getLocations(){return JSON.parse(localStorage.getItem(LOCATIONS_KEY)||'{}')}
+function saveLocations(d){localStorage.setItem(LOCATIONS_KEY,JSON.stringify(d))}
+
+// ===== 当前选中的状态 =====
+let curPlate = '';
+let curLocation = '';
+let curUnitPrice = 0;
+let curTrips = 1;
 
 // ===== 初始化 =====
 document.getElementById('recordDate').value = new Date().toISOString().split('T')[0];
-updateDriverSelect();
 switchTab('add');
 updateTotalEarnings();
+updatePlateChips();
+updateLocationChips();
 
 // ===== 标签切换 =====
 function switchTab(name){
@@ -181,26 +195,88 @@ function switchTab(name){
   });
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
-  if(name==='list') renderRecords();
+  if(name==='list'){ renderRecords(); updateFilterLocations(); }
   if(name==='summary') renderSummary();
-  updateDriverSelect();
   updateTotalEarnings();
+}
+
+// ===== 车牌号快速选择 =====
+function updatePlateChips(){
+  const plates = getPlates();
+  const container = document.getElementById('plateChips');
+  if(plates.length===0){ container.innerHTML=''; return; }
+  container.innerHTML = plates.map(p=>
+    '<span class="driver-chip'+(p===curPlate?' selected':'')+'" onclick="selectPlate(\''+p.replace(/'/g,"\\'")+'\')">'+p+'</span>'
+  ).join('');
+}
+
+function selectPlate(plate){
+  curPlate = plate;
+  document.getElementById('plateInput').value = plate;
+  updatePlateChips();
+}
+
+// ===== 地点快速选择 =====
+function updateLocationChips(){
+  const locations = getLocations();
+  const container = document.getElementById('locationChips');
+  const names = Object.keys(locations);
+  if(names.length===0){ container.innerHTML=''; return; }
+  container.innerHTML = names.map(loc=>
+    '<span class="driver-chip'+(loc===curLocation?' selected':'')+'" onclick="selectLocation(\''+loc.replace(/'/g,"\\'")+'\')">'+loc+' <small style="opacity:.7">¥'+locations[loc]+'</small></span>'
+  ).join('');
+}
+
+function selectLocation(loc){
+  curLocation = loc;
+  curUnitPrice = getLocations()[loc]||0;
+  document.getElementById('locationInput').value = '';
+  document.getElementById('unitPriceInput').value = '';
+  updateLocationChips();
+  updateAmountDisplay();
+}
+
+function addLocation(){
+  const name = document.getElementById('locationInput').value.trim();
+  const price = parseFloat(document.getElementById('unitPriceInput').value);
+  if(!name){showToast('请输入地点名称');return}
+  if(!price||price<1){showToast('请输入有效的单价');return}
+  const locations = getLocations();
+  locations[name] = price;
+  saveLocations(locations);
+  curLocation = name;
+  curUnitPrice = price;
+  document.getElementById('locationInput').value = '';
+  document.getElementById('unitPriceInput').value = '';
+  updateLocationChips();
+  updateAmountDisplay();
+  showToast('已保存地点：'+name+' 单价¥'+price);
+}
+
+// ===== 车次调整 =====
+function changeTrips(delta){
+  curTrips = Math.max(1, curTrips + delta);
+  document.getElementById('tripDisplay').textContent = curTrips;
+  updateAmountDisplay();
+}
+
+function updateAmountDisplay(){
+  const amount = curTrips * curUnitPrice;
+  document.getElementById('amountDisplay').textContent = amount>0 ? '¥'+amount : '¥0';
 }
 
 // ===== 语音输入（通过输入法自带语音） =====
 let parseTimer = null;
-
 document.getElementById('voiceInput').addEventListener('input', function(){
   const text = this.value.trim();
-  if(!text) {
-    document.getElementById('parseHint').textContent = '';
-    return;
-  }
-  // 延迟解析，等输入法语音输入完
+  if(!text){ document.getElementById('parseHint').textContent = ''; return; }
   clearTimeout(parseTimer);
-  parseTimer = setTimeout(()=>{
-    parseVoice(text);
-  }, 600);
+  parseTimer = setTimeout(()=>{ parseVoice(text); }, 600);
+});
+
+document.getElementById('plateInput').addEventListener('input', function(){
+  curPlate = this.value.trim();
+  updatePlateChips();
 });
 
 // 中文数字转换
@@ -217,109 +293,104 @@ function parseChineseNumber(s){
 }
 
 function parseVoice(text){
-  // 先清理文本
   text = text.replace(/[，。！？、\s]+/g,' ').trim();
+  const locations = getLocations();
+  const locNames = Object.keys(locations);
+  // 构建地点匹配正则（按名称长度降序，优先匹配长名称）
+  const locPattern = locNames.length>0 ? locNames.sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') : '';
 
-  // 模式1: "张三 3车 450元" 或 "张三3车450"
-  let match = text.match(/(.+)[\s]*(\d+)\s*[车趟次]\s*(\d+)\s*[元块]?/);
+  // 模式: 车牌 + 地点 + 车次，如 "粤B12345 沙河 3车"
+  // 车牌通常是字母+数字组合
+  let match = text.match(/([一-龥][A-Za-z0-9]{5,7})\s*(.+?)\s*(\d+)\s*[车趟次]?/);
   if(!match){
-    // 模式2: 中文数字 "张三 三车 四百五"
-    match = text.match(/(.+)[\s]*([一二两三四五六七八九十\d]+)\s*[车趟次]\s*([一二两三四五六七八九十百千\d]+)\s*[元块]?/);
-    if(match){
-      match[2] = parseChineseNumber(match[2]);
-      match[3] = parseChineseNumber(match[3]);
+    match = text.match(/([一-龥][A-Za-z0-9]{5,7})\s*(\S+?)\s*([一二两三四五六七八九十\d]+)\s*[车趟次]?/);
+    if(match){ match[3] = parseChineseNumber(match[3]); }
+  }
+  // 也尝试地点+车次格式（无车牌）
+  if(!match && locPattern){
+    match = text.match(new RegExp('(.+?)\\s*('+locPattern+')\\s*(\\d+)\\s*[车趟次]?'));
+    if(!match){
+      match = text.match(new RegExp('(.+?)\\s*('+locPattern+')\\s*([一二两三四五六七八九十\\d]+)\\s*[车趟次]?'));
+      if(match){ match[3] = parseChineseNumber(match[3]); }
     }
   }
-  if(match && match[2] && match[3]){
-    const name = match[1].trim();
-    const trips = parseInt(match[2]);
-    const amount = parseInt(match[3]);
 
-    // 填入表单
-    document.getElementById('driverNameCustom').value = name;
-    document.getElementById('driverNameCustom').style.display = 'block';
-    document.getElementById('driverName').value = '';
-    document.getElementById('tripCount').value = trips;
-    document.getElementById('totalAmount').value = amount;
+  if(match){
+    let plate='', loc='', trips;
+    if(match.length>=4){
+      // 判断第一组是车牌还是地名
+      const g1 = match[1].trim();
+      const g2 = match[2].trim();
+      if(/[一-龥][A-Za-z0-9]/.test(g1) && g1.length>=6){
+        plate = g1; loc = g2;
+      } else if(locNames.includes(g2)){
+        loc = g2; plate = g1;
+      } else if(locNames.includes(g1)){
+        loc = g1; plate = '';
+      } else {
+        plate = g1; loc = g2;
+      }
+      trips = parseInt(match[3]);
+    }
 
-    document.getElementById('parseHint').innerHTML = '✅ 已识别：<b>'+name+'</b> '+trips+'车 ¥'+amount+' — 请核对后点下方"记一笔"';
+    const price = locations[loc]||curUnitPrice||0;
+
+    if(plate){ selectPlate(plate); document.getElementById('plateInput').value = plate; }
+    if(loc && price){ selectLocation(loc); }
+    curTrips = trips||1;
+    document.getElementById('tripDisplay').textContent = curTrips;
+    updateAmountDisplay();
+
+    document.getElementById('parseHint').innerHTML = '✅ 已识别：<b>'+(plate||'未填')+'</b> '+loc+' '+curTrips+'车 ¥'+(curTrips*price)+' — 核对后点"记一笔"';
     document.getElementById('parseHint').style.color = '#4CAF50';
   } else {
-    document.getElementById('parseHint').textContent = '未能识别格式，请手动填写下方信息';
+    document.getElementById('parseHint').textContent = '未能识别，请手动填写下方信息';
     document.getElementById('parseHint').style.color = '#e8783b';
   }
 }
 
-// ===== 手动输入 =====
-function handleCustomName(){
-  const sel = document.getElementById('driverName');
-  const custom = document.getElementById('driverNameCustom');
-  if(sel.value==='__custom__'){
-    custom.style.display = 'block';
-    custom.focus();
-  } else {
-    custom.style.display = 'none';
-  }
-}
-
-function updateDriverSelect(){
-  const sel = document.getElementById('driverName');
-  const filterSel = document.getElementById('filterDriver');
-  const drivers = getDrivers();
-  const currentVal = sel.value;
-  const filterVal = filterSel.value;
-
-  const opts = drivers.map(d=>'<option value="'+d+'">'+d+'</option>').join('');
-  sel.innerHTML = '<option value="">选择司机</option>'+opts+'<option value="__custom__">+ 添加新司机</option>';
-  filterSel.innerHTML = '<option value="">全部司机</option>'+opts;
-  sel.value = currentVal;
-  filterSel.value = filterVal;
-}
-
-function getDriverName(){
-  const sel = document.getElementById('driverName');
-  const custom = document.getElementById('driverNameCustom');
-  if(sel.value==='__custom__' || (sel.value==='' && custom.style.display!=='none')){
-    return custom.value.trim();
-  }
-  return sel.value;
-}
-
+// ===== 添加记录 =====
 function addRecord(){
-  const name = getDriverName();
-  const trips = parseInt(document.getElementById('tripCount').value);
-  const amount = parseFloat(document.getElementById('totalAmount').value);
+  const plate = (curPlate || document.getElementById('plateInput').value).trim();
+  const loc = curLocation;
+  const trips = curTrips;
+  const unitPrice = curUnitPrice;
+  const amount = trips * unitPrice;
   const date = document.getElementById('recordDate').value;
 
-  if(!name){showToast('请输入司机姓名');return}
-  if(!trips||trips<1){showToast('请输入车次');return}
-  if(!amount||amount<1){showToast('请输入金额');return}
+  if(!plate){showToast('请输入车牌号');return}
+  if(!loc){showToast('请选择或新增拉货地点');return}
+  if(!unitPrice||unitPrice<1){showToast('请先设置地点的单价');return}
+  if(!trips||trips<1){showToast('车次至少为1');return}
 
   const records = getRecords();
   records.push({
     id: Date.now(),
-    name: name,
+    plate: plate,
+    location: loc,
     trips: trips,
+    unitPrice: unitPrice,
     amount: amount,
     date: date,
     createdAt: new Date().toISOString()
   });
   saveRecords(records);
 
-  // 保存司机名
-  const drivers = getDrivers();
-  if(!drivers.includes(name)){drivers.push(name);drivers.sort();saveDrivers(drivers)}
+  // 保存车牌
+  const plates = getPlates();
+  if(!plates.includes(plate)){plates.push(plate);plates.sort();savePlates(plates)}
 
   // 清空输入
   document.getElementById('voiceInput').value = '';
   document.getElementById('parseHint').textContent = '';
-  document.getElementById('tripCount').value = '';
-  document.getElementById('totalAmount').value = '';
-  document.getElementById('driverNameCustom').value = '';
-  document.getElementById('driverNameCustom').style.display = 'none';
-  updateDriverSelect();
+  document.getElementById('plateInput').value = '';
+  curPlate = '';
+  curTrips = 1;
+  document.getElementById('tripDisplay').textContent = '1';
+  updateAmountDisplay();
+  updatePlateChips();
   updateTotalEarnings();
-  showToast('✅ 已记录：'+name+' '+trips+'车 ¥'+amount);
+  showToast('✅ 已记录：'+plate+' '+loc+' '+trips+'车 ¥'+amount);
 }
 
 function deleteRecord(id){
@@ -331,12 +402,21 @@ function deleteRecord(id){
   showToast('已删除');
 }
 
+// ===== 记录列表 =====
+function updateFilterLocations(){
+  const sel = document.getElementById('filterLocation');
+  const locations = getLocations();
+  const val = sel.value;
+  sel.innerHTML = '<option value="">全部地点</option>'+Object.keys(locations).map(l=>'<option value="'+l+'">'+l+'</option>').join('');
+  sel.value = val;
+}
+
 function renderRecords(){
   let records = getRecords();
-  const filterDriver = document.getElementById('filterDriver').value;
+  const filterLoc = document.getElementById('filterLocation').value;
   const filterDate = document.getElementById('filterDate').value;
 
-  if(filterDriver) records = records.filter(r=>r.name===filterDriver);
+  if(filterLoc) records = records.filter(r=>r.location===filterLoc);
   if(filterDate) records = records.filter(r=>r.date===filterDate);
 
   records.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
@@ -349,8 +429,8 @@ function renderRecords(){
   container.innerHTML = records.map(r=>`
     <div class="record-item">
       <div class="record-info">
-        <div class="record-name">${r.name}</div>
-        <div class="record-detail">${r.date} · ${r.trips}车</div>
+        <div class="record-name">${r.plate} <span style="font-size:13px;color:#8b7355">${r.location}</span></div>
+        <div class="record-detail">${r.date} · ${r.trips}车 × ¥${r.unitPrice} = ¥${r.amount.toFixed(0)}</div>
       </div>
       <div class="record-amount">¥${r.amount.toFixed(0)}</div>
       <div class="record-del" onclick="deleteRecord(${r.id})" title="删除">×</div>
@@ -359,7 +439,7 @@ function renderRecords(){
 }
 
 function clearFilter(){
-  document.getElementById('filterDriver').value='';
+  document.getElementById('filterLocation').value='';
   document.getElementById('filterDate').value='';
   renderRecords();
 }
@@ -373,12 +453,15 @@ function renderSummary(){
     return;
   }
 
-  // 按人汇总
-  const byPerson = {};
+  // 按地点分组，每个地点内按车牌汇总
+  const byLocation = {};
   records.forEach(r=>{
-    if(!byPerson[r.name]) byPerson[r.name] = {trips:0,amount:0};
-    byPerson[r.name].trips += r.trips;
-    byPerson[r.name].amount += r.amount;
+    if(!byLocation[r.location]) byLocation[r.location] = {trips:0,amount:0,plates:{}};
+    byLocation[r.location].trips += r.trips;
+    byLocation[r.location].amount += r.amount;
+    if(!byLocation[r.location].plates[r.plate]) byLocation[r.location].plates[r.plate] = {trips:0,amount:0};
+    byLocation[r.location].plates[r.plate].trips += r.trips;
+    byLocation[r.location].plates[r.plate].amount += r.amount;
   });
 
   // 本月汇总
@@ -388,10 +471,6 @@ function renderSummary(){
   const monthTotal = monthRecords.reduce((s,r)=>s+r.amount,0);
   const monthTrips = monthRecords.reduce((s,r)=>s+r.trips,0);
 
-  // 全部汇总
-  const allTotal = records.reduce((s,r)=>s+r.amount,0);
-  const allTrips = records.reduce((s,r)=>s+r.trips,0);
-
   let html = '';
 
   // 本月概览
@@ -400,12 +479,25 @@ function renderSummary(){
   html += '<div class="summary-row total"><span>本月合计</span><span>¥'+monthTotal.toFixed(0)+'</span></div>';
   html += '</div>';
 
-  // 按人汇总
-  html += '<div class="summary-block"><h3>👤 按司机汇总（全部）</h3>';
-  Object.entries(byPerson).sort((a,b)=>b[1].amount-a[1].amount).forEach(([name,data])=>{
-    html += '<div class="summary-row"><span>'+name+'</span><span>'+data.trips+'车 · ¥'+data.amount.toFixed(0)+'</span></div>';
+  // 按地点汇总
+  Object.entries(byLocation).sort((a,b)=>b[1].amount-a[1].amount).forEach(([loc,data])=>{
+    const locs = getLocations();
+    const price = locs[loc]||'?';
+    html += '<div class="summary-block"><h3>📍 '+loc+'（单价¥'+price+'）</h3>';
+    html += '<div class="summary-row"><span>总车次</span><span>'+data.trips+' 车</span></div>';
+    html += '<div class="summary-row"><span>总金额</span><span>¥'+data.amount.toFixed(0)+'</span></div>';
+    // 按车牌
+    Object.entries(data.plates).sort((a,b)=>b[1].amount-a[1].amount).forEach(([plate,pd])=>{
+      html += '<div class="summary-row" style="padding-left:12px;font-size:14px"><span>🚛 '+plate+'</span><span>'+pd.trips+'车 · ¥'+pd.amount.toFixed(0)+'</span></div>';
+    });
+    html += '</div>';
   });
-  html += '<div class="summary-row total"><span>全部合计</span><span>'+allTrips+'车 · ¥'+allTotal.toFixed(0)+'</span></div>';
+
+  // 全部合计
+  const allTotal = records.reduce((s,r)=>s+r.amount,0);
+  const allTrips = records.reduce((s,r)=>s+r.trips,0);
+  html += '<div class="summary-block"><h3>📊 全部合计</h3>';
+  html += '<div class="summary-row total"><span>总计</span><span>'+allTrips+'车 · ¥'+allTotal.toFixed(0)+'</span></div>';
   html += '</div>';
 
   container.innerHTML = html;
@@ -424,9 +516,9 @@ function exportCSV(){
   const records = getRecords();
   if(records.length===0){showToast('没有记录可导出');return}
   records.sort((a,b)=>a.date.localeCompare(b.date));
-  let csv = '﻿日期,司机,车次,金额(元)\n';
+  let csv = '﻿日期,车牌号,地点,车次,单价(元),金额(元)\n';
   records.forEach(r=>{
-    csv += r.date+','+r.name+','+r.trips+','+r.amount+'\n';
+    csv += r.date+','+r.plate+','+r.location+','+r.trips+','+r.unitPrice+','+r.amount+'\n';
   });
   const blob = new Blob([csv],{type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
@@ -447,7 +539,6 @@ function showToast(msg){
   document.body.appendChild(el);
   setTimeout(()=>el.remove(),2000);
 }
-
 </script>
 </body>
 </html>
