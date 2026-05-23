@@ -292,14 +292,15 @@ function parseChineseNumber(s){
   return parseInt(num)||0;
 }
 
-function parseVoice(text){
-  const original = text;
-  text = text.replace(/[，。！？、\s]+/g,'').trim();
+function parseVoice(rawText){
+  const original = rawText;
+  // 去空格和标点，但保留原始文本用于调试
+  let text = rawText.replace(/[，。！？、\s]+/g,'').trim();
+  if(!text) return;
   const locations = getLocations();
   const locNames = Object.keys(locations);
 
   // ===== 1. 提取车牌 =====
-  // 匹配省份简称+字母+数字字母组合的车牌（支持常规牌和新能源）
   const provinceChars = '京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁港澳';
   let plate = '';
   const plateMatch = text.match(new RegExp('(['+provinceChars+'])([A-Za-z][A-Za-z0-9]{4,7})'));
@@ -308,75 +309,98 @@ function parseVoice(text){
     text = text.replace(plate, '');
   }
 
-  // ===== 2. 提取车次 =====
-  // 匹配: 数字+车/趟/拖车/趟车, 或 "两车"/"三车"等中文数字
+  // ===== 2. 提取所有数字（只提取跟车/趟/元/单价相关的） =====
+  const allNums = [];
+  // 阿拉伯数字
+  const digitMatches = [...text.matchAll(/\d+/g)];
+  digitMatches.forEach(m => {
+    allNums.push({value: parseInt(m[0]), pos: m.index, raw: m[0]});
+  });
+  // 中文数字 — 只提取后面跟着车/趟/元/块，或前面有"单价""拖"的
+  const cnContextMatch = /(单价|拖)?([一二两三四五六七八九十百千]+)\s*([车趟元块]|$)/g;
+  const cnMatches = [...text.matchAll(cnContextMatch)];
+  cnMatches.forEach(m => {
+    const v = parseChineseNumber(m[2]);
+    if(v>0) allNums.push({value: v, pos: m.index + (m[1]||'').length, raw: m[2]});
+  });
+  allNums.sort((a,b)=>a.pos-b.pos);
+
+  // ===== 3. 分类数字：车次 vs 单价 =====
   let trips = 0;
-  let tripsRaw = text.match(/(\d+)\s*[车趟]/);
-  if(tripsRaw){
-    trips = parseInt(tripsRaw[1]);
-  } else {
-    tripsRaw = text.match(/([一二两三四五六七八九十]+)\s*[车趟]/);
-    if(tripsRaw){
-      trips = parseChineseNumber(tripsRaw[1]);
-    }
-  }
-  // 也尝试 "拖X车" 格式
-  if(!trips){
-    tripsRaw = text.match(/拖\s*(\d+)\s*车/);
-    if(tripsRaw) trips = parseInt(tripsRaw[1]);
-    else {
-      tripsRaw = text.match(/拖\s*([一二两三四五六七八九十]+)\s*车/);
-      if(tripsRaw) trips = parseChineseNumber(tripsRaw[1]);
-    }
-  }
-
-  // ===== 3. 提取单价 =====
-  // 匹配: 单价+数字+元, 或末尾的数字+元
   let unitPrice = 0;
-  let priceRaw = text.match(/单价\s*(\d+)\s*[元块]?/);
-  if(priceRaw){
-    unitPrice = parseInt(priceRaw[1]);
+
+  // 检查是否有"单价"关键词
+  const djIdx = text.indexOf('单价');
+  // 检查每个数字后面是不是跟着"车"或"趟"
+  for(let i=0; i<allNums.length; i++){
+    const n = allNums[i];
+    const after = text.substring(n.pos + n.raw.length, n.pos + n.raw.length + 3);
+    if(/^[车趟]/.test(after)){
+      // 这个数字是车次
+      if(!trips || n.value < trips) trips = n.value;
+      continue;
+    }
+    // 检查前面是否有"单价"
+    if(djIdx>=0 && n.pos > djIdx){
+      // 单价后面的数字
+      if(!unitPrice) unitPrice = n.value;
+      continue;
+    }
+    // 检查后面是否有"元"
+    if(/^[元块]/.test(after)){
+      // 可能是金额或单价
+      if(!unitPrice) unitPrice = n.value;
+      continue;
+    }
+    // 未分类的数字
+    if(!trips && n.value<=50) trips = n.value;
+    else if(!unitPrice) unitPrice = n.value;
   }
 
-  // ===== 4. 提取地点 =====
-  // 先尝试匹配已知地点
+  // ===== 4. 修正不合理值 =====
+  // 如果车次>50，可能识别错了，交换
+  if(trips>50 && unitPrice && unitPrice<=50){
+    const tmp = trips;
+    trips = unitPrice;
+    unitPrice = tmp;
+  }
+  // 默认值
+  if(!trips) trips = 1;
+
+  // ===== 5. 提取地点 =====
   let loc = '';
+  // 先尝试匹配已知地点
   if(locNames.length>0){
-    const sorted = locNames.sort((a,b)=>b.length-a.length);
+    const sorted = [...locNames].sort((a,b)=>b.length-a.length);
     for(const name of sorted){
-      if(text.includes(name)){
-        loc = name;
-        break;
-      }
+      if(text.includes(name)){ loc = name; break; }
     }
   }
-  // 如果没有匹配到已知地点，从文本中提取：移除关键词后剩余的部分
+  // 没有已知地点时，清理文本提取
   if(!loc){
-    let remaining = text
-      .replace(/在|拖|拉|去|到|的/g,'')
-      .replace(/\d+[车趟]/g,'')
-      .replace(/[一二两三四五六七八九十]+[车趟]/g,'')
-      .replace(/单价\s*\d+\s*[元块]?/g,'')
-      .replace(/\d+\s*[元块]$/g,'')
-      .replace(/^[的了呢啊呀]+/g,'')
-      .replace(/[的了呢啊呀]+$/g,'')
-      .trim();
-    if(remaining && remaining.length>=2 && remaining.length<=15){
+    let remaining = text;
+    // 去掉已识别的数字及其单位（阿拉伯+中文）
+    remaining = remaining.replace(/\d+\s*[车趟元块]?/g,'');
+    remaining = remaining.replace(/[一二两三四五六七八九十百千]+\s*[车趟元块]/g,'');
+    remaining = remaining.replace(/单价\s*\d+/g,'');
+    // 去掉关键词
+    remaining = remaining.replace(/在|拖|拉|去|到|的|单价|元|块|车|趟/g,'');
+    // 去掉句首句尾的语气词
+    remaining = remaining.replace(/^[的了呢啊呀哦]+/g,'').replace(/[的了呢啊呀哦]+$/g,'').trim();
+    if(remaining && remaining.length>=2 && remaining.length<=20){
       loc = remaining;
-      // 不自动保存为新地点，保留在输入框让用户确认
       document.getElementById('locationInput').value = loc;
     }
   }
 
-  // ===== 5. 汇总结果 =====
+  // ===== 6. 汇总结果 =====
   if(plate || loc || trips){
     if(plate){ selectPlate(plate); document.getElementById('plateInput').value = plate; }
 
-    const price = locations[loc]||unitPrice||curUnitPrice||0;
     if(loc && locations[loc]){
       selectLocation(loc);
     } else if(loc && unitPrice){
-      // 语音报出了新地点和单价，自动保存
+      // 新地点+单价 → 自动保存
       locations[loc] = unitPrice;
       saveLocations(locations);
       curLocation = loc;
@@ -387,19 +411,20 @@ function parseVoice(text){
       updateAmountDisplay();
     } else if(loc){
       curLocation = loc;
-      curUnitPrice = price;
+      curUnitPrice = unitPrice || curUnitPrice;
       updateLocationChips();
     }
 
-    curTrips = trips||1;
+    curTrips = trips;
     document.getElementById('tripDisplay').textContent = curTrips;
     updateAmountDisplay();
 
     const total = curTrips * curUnitPrice;
-    document.getElementById('parseHint').innerHTML = '✅ 已识别：<b>'+(plate||'未填')+'</b> '+loc+' '+curTrips+'车 单价¥'+curUnitPrice+' = ¥'+total+' — 核对后点"记一笔"';
+    const dbg = ' ['+original+']';
+    document.getElementById('parseHint').innerHTML = '✅ <b>'+(plate||'未填')+'</b> '+loc+' '+curTrips+'车 × ¥'+curUnitPrice+' = ¥'+total+' — 核对后点"记一笔"<br><small style="color:#aaa">识别原文：'+original+'</small>';
     document.getElementById('parseHint').style.color = '#4CAF50';
   } else {
-    document.getElementById('parseHint').textContent = '未能识别，请手动填写下方信息（原文：'+original+'）';
+    document.getElementById('parseHint').innerHTML = '未能识别，请手动填写<br><small style="color:#aaa">识别原文：'+original+'</small>';
     document.getElementById('parseHint').style.color = '#e8783b';
   }
 }
