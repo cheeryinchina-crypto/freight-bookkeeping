@@ -280,7 +280,7 @@ document.getElementById('plateInput').addEventListener('input', function(){
 });
 
 // 中文数字转换
-const CN_NUM = {'零':0,'一':1,'二':2,'两':3,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'百':100,'千':1000,'万':10000};
+const CN_NUM = {'零':0,'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'百':100,'千':1000,'万':10000};
 
 function parseChineseNumber(s){
   s = s.replace(/块/g,'元').replace(/趟/g,'车').replace(/个/g,'');
@@ -293,58 +293,113 @@ function parseChineseNumber(s){
 }
 
 function parseVoice(text){
-  text = text.replace(/[，。！？、\s]+/g,' ').trim();
+  const original = text;
+  text = text.replace(/[，。！？、\s]+/g,'').trim();
   const locations = getLocations();
   const locNames = Object.keys(locations);
-  // 构建地点匹配正则（按名称长度降序，优先匹配长名称）
-  const locPattern = locNames.length>0 ? locNames.sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') : '';
 
-  // 模式: 车牌 + 地点 + 车次，如 "粤B12345 沙河 3车"
-  // 车牌通常是字母+数字组合
-  let match = text.match(/([一-龥][A-Za-z0-9]{5,7})\s*(.+?)\s*(\d+)\s*[车趟次]?/);
-  if(!match){
-    match = text.match(/([一-龥][A-Za-z0-9]{5,7})\s*(\S+?)\s*([一二两三四五六七八九十\d]+)\s*[车趟次]?/);
-    if(match){ match[3] = parseChineseNumber(match[3]); }
+  // ===== 1. 提取车牌 =====
+  // 匹配省份简称+字母+数字字母组合的车牌（支持常规牌和新能源）
+  const provinceChars = '京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁港澳';
+  let plate = '';
+  const plateMatch = text.match(new RegExp('(['+provinceChars+'])([A-Za-z][A-Za-z0-9]{4,7})'));
+  if(plateMatch){
+    plate = plateMatch[0];
+    text = text.replace(plate, '');
   }
-  // 也尝试地点+车次格式（无车牌）
-  if(!match && locPattern){
-    match = text.match(new RegExp('(.+?)\\s*('+locPattern+')\\s*(\\d+)\\s*[车趟次]?'));
-    if(!match){
-      match = text.match(new RegExp('(.+?)\\s*('+locPattern+')\\s*([一二两三四五六七八九十\\d]+)\\s*[车趟次]?'));
-      if(match){ match[3] = parseChineseNumber(match[3]); }
+
+  // ===== 2. 提取车次 =====
+  // 匹配: 数字+车/趟/拖车/趟车, 或 "两车"/"三车"等中文数字
+  let trips = 0;
+  let tripsRaw = text.match(/(\d+)\s*[车趟]/);
+  if(tripsRaw){
+    trips = parseInt(tripsRaw[1]);
+  } else {
+    tripsRaw = text.match(/([一二两三四五六七八九十]+)\s*[车趟]/);
+    if(tripsRaw){
+      trips = parseChineseNumber(tripsRaw[1]);
+    }
+  }
+  // 也尝试 "拖X车" 格式
+  if(!trips){
+    tripsRaw = text.match(/拖\s*(\d+)\s*车/);
+    if(tripsRaw) trips = parseInt(tripsRaw[1]);
+    else {
+      tripsRaw = text.match(/拖\s*([一二两三四五六七八九十]+)\s*车/);
+      if(tripsRaw) trips = parseChineseNumber(tripsRaw[1]);
     }
   }
 
-  if(match){
-    let plate='', loc='', trips;
-    if(match.length>=4){
-      // 判断第一组是车牌还是地名
-      const g1 = match[1].trim();
-      const g2 = match[2].trim();
-      if(/[一-龥][A-Za-z0-9]/.test(g1) && g1.length>=6){
-        plate = g1; loc = g2;
-      } else if(locNames.includes(g2)){
-        loc = g2; plate = g1;
-      } else if(locNames.includes(g1)){
-        loc = g1; plate = '';
-      } else {
-        plate = g1; loc = g2;
+  // ===== 3. 提取单价 =====
+  // 匹配: 单价+数字+元, 或末尾的数字+元
+  let unitPrice = 0;
+  let priceRaw = text.match(/单价\s*(\d+)\s*[元块]?/);
+  if(priceRaw){
+    unitPrice = parseInt(priceRaw[1]);
+  }
+
+  // ===== 4. 提取地点 =====
+  // 先尝试匹配已知地点
+  let loc = '';
+  if(locNames.length>0){
+    const sorted = locNames.sort((a,b)=>b.length-a.length);
+    for(const name of sorted){
+      if(text.includes(name)){
+        loc = name;
+        break;
       }
-      trips = parseInt(match[3]);
+    }
+  }
+  // 如果没有匹配到已知地点，从文本中提取：移除关键词后剩余的部分
+  if(!loc){
+    let remaining = text
+      .replace(/在|拖|拉|去|到|的/g,'')
+      .replace(/\d+[车趟]/g,'')
+      .replace(/[一二两三四五六七八九十]+[车趟]/g,'')
+      .replace(/单价\s*\d+\s*[元块]?/g,'')
+      .replace(/\d+\s*[元块]$/g,'')
+      .replace(/^[的了呢啊呀]+/g,'')
+      .replace(/[的了呢啊呀]+$/g,'')
+      .trim();
+    if(remaining && remaining.length>=2 && remaining.length<=15){
+      loc = remaining;
+      // 不自动保存为新地点，保留在输入框让用户确认
+      document.getElementById('locationInput').value = loc;
+    }
+  }
+
+  // ===== 5. 汇总结果 =====
+  if(plate || loc || trips){
+    if(plate){ selectPlate(plate); document.getElementById('plateInput').value = plate; }
+
+    const price = locations[loc]||unitPrice||curUnitPrice||0;
+    if(loc && locations[loc]){
+      selectLocation(loc);
+    } else if(loc && unitPrice){
+      // 语音报出了新地点和单价，自动保存
+      locations[loc] = unitPrice;
+      saveLocations(locations);
+      curLocation = loc;
+      curUnitPrice = unitPrice;
+      document.getElementById('locationInput').value = '';
+      document.getElementById('unitPriceInput').value = '';
+      updateLocationChips();
+      updateAmountDisplay();
+    } else if(loc){
+      curLocation = loc;
+      curUnitPrice = price;
+      updateLocationChips();
     }
 
-    const price = locations[loc]||curUnitPrice||0;
-
-    if(plate){ selectPlate(plate); document.getElementById('plateInput').value = plate; }
-    if(loc && price){ selectLocation(loc); }
     curTrips = trips||1;
     document.getElementById('tripDisplay').textContent = curTrips;
     updateAmountDisplay();
 
-    document.getElementById('parseHint').innerHTML = '✅ 已识别：<b>'+(plate||'未填')+'</b> '+loc+' '+curTrips+'车 ¥'+(curTrips*price)+' — 核对后点"记一笔"';
+    const total = curTrips * curUnitPrice;
+    document.getElementById('parseHint').innerHTML = '✅ 已识别：<b>'+(plate||'未填')+'</b> '+loc+' '+curTrips+'车 单价¥'+curUnitPrice+' = ¥'+total+' — 核对后点"记一笔"';
     document.getElementById('parseHint').style.color = '#4CAF50';
   } else {
-    document.getElementById('parseHint').textContent = '未能识别，请手动填写下方信息';
+    document.getElementById('parseHint').textContent = '未能识别，请手动填写下方信息（原文：'+original+'）';
     document.getElementById('parseHint').style.color = '#e8783b';
   }
 }
