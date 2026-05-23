@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>货运记账本</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f0e8;color:#3d3226;min-height:100vh;-webkit-tap-highlight-color:transparent}
+
+.header{background:linear-gradient(135deg,#e8783b,#c4561a);color:#fff;padding:14px 18px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header h1{font-size:22px;font-weight:600;letter-spacing:2px}
+.header .sub{font-size:13px;opacity:.85;margin-top:2px}
+
+.tabs{display:flex;background:#fff;border-bottom:1px solid #e0d5c5}
+.tab{flex:1;text-align:center;padding:12px 0;font-size:15px;color:#8b7355;cursor:pointer;border-bottom:3px solid transparent;transition:all .2s}
+.tab.active{color:#c4561a;border-bottom-color:#c4561a;font-weight:600}
+
+.page{display:none;padding:14px}
+.page.active{display:block}
+
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:10px;padding:12px 24px;font-size:17px;font-weight:600;cursor:pointer;transition:all .15s;min-height:48px}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:#c4561a;color:#fff;width:100%}
+.btn-outline{background:#fff;color:#c4561a;border:2px solid #c4561a}
+.btn-danger{background:#e74c3c;color:#fff}
+.btn-sm{padding:8px 14px;font-size:13px;min-height:36px;border-radius:8px}
+.btn-voice{background:#4CAF50;color:#fff;width:100%;font-size:18px;padding:16px}
+.btn-voice.recording{background:#f44336;animation:pulse .8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+
+.input-group{margin-bottom:12px}
+.input-group label{display:block;font-size:14px;color:#8b7355;margin-bottom:4px;font-weight:500}
+.input-group input,.input-group select{width:100%;padding:12px 14px;border:2px solid #e0d5c5;border-radius:10px;font-size:17px;background:#faf8f5;color:#3d3226;outline:none;transition:border .2s}
+.input-group input:focus{border-color:#c4561a}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+
+.voice-text{background:#faf8f5;border:2px dashed #e0d5c5;border-radius:10px;padding:14px;font-size:17px;min-height:50px;color:#8b7355;text-align:center;margin:10px 0;word-break:break-all}
+.voice-text.has-content{color:#3d3226;border-style:solid;border-color:#4CAF50}
+
+.record-item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f0ebe0}
+.record-item:last-child{border-bottom:none}
+.record-info{flex:1}
+.record-name{font-size:17px;font-weight:600}
+.record-detail{font-size:13px;color:#8b7355;margin-top:2px}
+.record-amount{font-size:18px;font-weight:700;color:#c4561a;text-align:right}
+.record-del{padding:6px 10px;color:#ccc;cursor:pointer;font-size:18px}
+
+.summary-block{margin-bottom:14px}
+.summary-block h3{font-size:16px;color:#c4561a;margin-bottom:8px;border-bottom:2px solid #f0ebe0;padding-bottom:6px}
+.summary-row{display:flex;justify-content:space-between;padding:8px 0;font-size:15px;border-bottom:1px solid #faf8f5}
+.summary-row.total{font-size:18px;font-weight:700;color:#c4561a;border-top:2px solid #c4561a;border-bottom:none;padding-top:10px;margin-top:6px}
+
+.export-hint{text-align:center;color:#8b7355;font-size:13px;margin-top:8px}
+
+.empty{text-align:center;color:#bbb;padding:40px 0;font-size:15px}
+
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;padding:10px 24px;border-radius:20px;font-size:14px;z-index:999;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+.filter-bar{display:flex;gap:8px;margin-bottom:12px}
+.filter-bar select,.filter-bar input{flex:1;padding:10px;border:2px solid #e0d5c5;border-radius:8px;font-size:14px;background:#fff}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>货运记账本</h1>
+  <div class="sub" id="totalEarnings">本月合计：¥0</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('add')">📝 记账</div>
+  <div class="tab" onclick="switchTab('list')">📋 记录</div>
+  <div class="tab" onclick="switchTab('summary')">📊 汇总</div>
+</div>
+
+<!-- 记账页 -->
+<div class="page active" id="page-add">
+  <div class="card">
+    <button type="button" class="btn btn-voice" id="voiceBtn">🎤 点击说话记账</button>
+    <div class="voice-text" id="voiceText">说出如：张三 3车 450元</div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:16px;font-weight:600;margin-bottom:10px;color:#3d3226">✍️ 手动输入</div>
+    <div class="input-group">
+      <label>司机姓名</label>
+      <select id="driverName" onchange="handleCustomName()">
+        <option value="">选择司机</option>
+      </select>
+      <input type="text" id="driverNameCustom" placeholder="或输入新名字" style="margin-top:6px;display:none">
+    </div>
+    <div class="row">
+      <div class="input-group">
+        <label>车次（趟数）</label>
+        <input type="number" id="tripCount" placeholder="0" min="1" inputmode="numeric">
+      </div>
+      <div class="input-group">
+        <label>金额（元）</label>
+        <input type="number" id="totalAmount" placeholder="0" min="0" inputmode="numeric">
+      </div>
+    </div>
+    <div class="input-group">
+      <label>日期</label>
+      <input type="date" id="recordDate">
+    </div>
+    <button class="btn btn-primary" onclick="addRecord()">✅ 记一笔</button>
+  </div>
+</div>
+
+<!-- 记录页 -->
+<div class="page" id="page-list">
+  <div class="filter-bar">
+    <select id="filterDriver" onchange="renderRecords()">
+      <option value="">全部司机</option>
+    </select>
+    <input type="date" id="filterDate" onchange="renderRecords()">
+    <button class="btn btn-sm btn-outline" onclick="clearFilter()">清除</button>
+  </div>
+  <div class="card" id="recordList">
+    <div class="empty">暂无记录</div>
+  </div>
+  <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="exportCSV()">📥 导出为表格文件</button>
+  <div class="export-hint">导出后用 Excel 或 WPS 打开</div>
+</div>
+
+<!-- 汇总页 -->
+<div class="page" id="page-summary">
+  <div class="card" id="summaryContent">
+    <div class="empty">暂无数据</div>
+  </div>
+</div>
+
+<script>
+// ===== 数据管理 =====
+const STORAGE_KEY = 'truck_bookkeeping';
+const DRIVERS_KEY = 'truck_drivers';
+
+function getRecords(){return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}
+function saveRecords(r){localStorage.setItem(STORAGE_KEY,JSON.stringify(r))}
+function getDrivers(){return JSON.parse(localStorage.getItem(DRIVERS_KEY)||'[]')}
+function saveDrivers(d){localStorage.setItem(DRIVERS_KEY,JSON.stringify(d))}
+
+// ===== 初始化 =====
+document.getElementById('recordDate').value = new Date().toISOString().split('T')[0];
+updateDriverSelect();
+switchTab('add');
+updateTotalEarnings();
+
+// ===== 标签切换 =====
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    t.classList.toggle('active',['add','list','summary'][i]===name)
+  });
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  if(name==='list') renderRecords();
+  if(name==='summary') renderSummary();
+  updateDriverSelect();
+  updateTotalEarnings();
+}
+
+// ===== 语音识别 =====
+let recognition = null;
+let isRecording = false;
+
+function startVoice(){
+  if(!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)){
+    showToast('您的浏览器不支持语音输入，请手动输入');
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  try {
+    recognition = new SR();
+  } catch(e) {
+    showToast('语音功能不可用，请手动输入');
+    return;
+  }
+  recognition.lang = 'zh-CN';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = ()=>{
+    isRecording = true;
+    const btn = document.getElementById('voiceBtn');
+    btn.textContent = '🔴 正在聆听...点击停止';
+    btn.classList.add('recording');
+    document.getElementById('voiceText').textContent = '请说话...';
+  };
+
+  recognition.onresult = (e)=>{
+    let text = '';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      text += e.results[i][0].transcript;
+    }
+    document.getElementById('voiceText').textContent = text;
+    document.getElementById('voiceText').classList.add('has-content');
+  };
+
+  recognition.onend = ()=>{
+    stopVoice();
+    const text = document.getElementById('voiceText').textContent.trim();
+    if(text && text!=='请说话...'){
+      parseVoice(text);
+    }
+  };
+
+  recognition.onerror = (e)=>{
+    const err = e.error || '';
+    stopVoice();
+    if(err==='aborted') return;
+    if(err==='no-speech'){
+      showToast('未检测到语音，请对准话筒说话');
+    } else if(err==='not-allowed'){
+      showToast('麦克风权限未开启，请在浏览器设置中允许');
+    } else if(err==='audio-capture'){
+      showToast('未检测到麦克风设备');
+    } else if(err==='network'){
+      showToast('网络连接失败，语音识别需要联网');
+    } else if(err==='service-not-allowed'){
+      showToast('浏览器不允许使用语音服务，可能需HTTPS');
+    } else {
+      showToast('语音识别失败('+err+')，请手动输入');
+    }
+  };
+
+  try {
+    recognition.start();
+  } catch(e) {
+    isRecording = false;
+    const btn = document.getElementById('voiceBtn');
+    btn.textContent = '🎤 点击说话记账';
+    btn.classList.remove('recording');
+    recognition = null;
+    showToast('语音启动失败，请检查浏览器权限或使用手动输入');
+  }
+}
+
+function stopVoice(){
+  isRecording = false;
+  const btn = document.getElementById('voiceBtn');
+  btn.textContent = '🎤 点击说话记账';
+  btn.classList.remove('recording');
+  if(recognition){
+    try { recognition.stop(); } catch(e) {}
+    recognition = null;
+  }
+}
+
+function toggleVoice(){
+  if(isRecording){
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+// 中文数字转换
+const CN_NUM = {'零':0,'一':1,'二':2,'两':3,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'百':100,'千':1000,'万':10000};
+
+function parseChineseNumber(s){
+  s = s.replace(/块/g,'元').replace(/趟/g,'车').replace(/个/g,'');
+  let num = '';
+  for(let c of s){
+    if(c>='0'&&c<='9') num+=c;
+    else if(CN_NUM[c]!==undefined) num+=CN_NUM[c];
+  }
+  return parseInt(num)||0;
+}
+
+function parseVoice(text){
+  // 尝试匹配: 姓名 + 数字车 + 数字元
+  // 模式1: "张三 3车 450元" 或 "张三3车450"
+  let match = text.match(/(.+?)[\s]*(\d+)\s*[车趟次]\s*(\d+)\s*[元块]?/);
+  if(!match){
+    // 模式2: 包含中文数字 "张三 三车 四百五"
+    match = text.match(/(.+?)[\s]*([一二两三四五六七八九十\d]+)\s*[车趟次]\s*([一二两三四五六七八九十百千\d]+)\s*[元块]?/);
+    if(match){
+      match[2] = parseChineseNumber(match[2]);
+      match[3] = parseChineseNumber(match[3]);
+    }
+  }
+  if(match && match[2] && match[3]){
+    document.getElementById('driverNameCustom').value = match[1].trim();
+    document.getElementById('driverNameCustom').style.display = 'block';
+    document.getElementById('driverName').value = '';
+    document.getElementById('tripCount').value = parseInt(match[2]);
+    document.getElementById('totalAmount').value = parseInt(match[3]);
+    showToast('已识别：'+match[1].trim()+' '+match[2]+'车 '+match[3]+'元，请确认后点"记一笔"');
+  } else {
+    showToast('未能识别，请说"姓名 几车 多少钱"');
+  }
+}
+
+// ===== 手动输入 =====
+function handleCustomName(){
+  const sel = document.getElementById('driverName');
+  const custom = document.getElementById('driverNameCustom');
+  if(sel.value==='__custom__'){
+    custom.style.display = 'block';
+    custom.focus();
+  } else {
+    custom.style.display = 'none';
+  }
+}
+
+function updateDriverSelect(){
+  const sel = document.getElementById('driverName');
+  const filterSel = document.getElementById('filterDriver');
+  const drivers = getDrivers();
+  const currentVal = sel.value;
+  const filterVal = filterSel.value;
+
+  const opts = drivers.map(d=>'<option value="'+d+'">'+d+'</option>').join('');
+  sel.innerHTML = '<option value="">选择司机</option>'+opts+'<option value="__custom__">+ 添加新司机</option>';
+  filterSel.innerHTML = '<option value="">全部司机</option>'+opts;
+  sel.value = currentVal;
+  filterSel.value = filterVal;
+}
+
+function getDriverName(){
+  const sel = document.getElementById('driverName');
+  const custom = document.getElementById('driverNameCustom');
+  if(sel.value==='__custom__' || (sel.value==='' && custom.style.display!=='none')){
+    return custom.value.trim();
+  }
+  return sel.value;
+}
+
+function addRecord(){
+  const name = getDriverName();
+  const trips = parseInt(document.getElementById('tripCount').value);
+  const amount = parseFloat(document.getElementById('totalAmount').value);
+  const date = document.getElementById('recordDate').value;
+
+  if(!name){showToast('请输入司机姓名');return}
+  if(!trips||trips<1){showToast('请输入车次');return}
+  if(!amount||amount<1){showToast('请输入金额');return}
+
+  const records = getRecords();
+  records.push({
+    id: Date.now(),
+    name: name,
+    trips: trips,
+    amount: amount,
+    date: date,
+    createdAt: new Date().toISOString()
+  });
+  saveRecords(records);
+
+  // 保存司机名
+  const drivers = getDrivers();
+  if(!drivers.includes(name)){drivers.push(name);drivers.sort();saveDrivers(drivers)}
+
+  // 清空输入
+  document.getElementById('tripCount').value = '';
+  document.getElementById('totalAmount').value = '';
+  document.getElementById('driverNameCustom').value = '';
+  document.getElementById('driverNameCustom').style.display = 'none';
+  document.getElementById('voiceText').textContent = '说出如：张三 3车 450元';
+  document.getElementById('voiceText').classList.remove('has-content');
+  updateDriverSelect();
+  updateTotalEarnings();
+  showToast('✅ 已记录：'+name+' '+trips+'车 ¥'+amount);
+}
+
+function deleteRecord(id){
+  if(!confirm('确定删除这条记录吗？'))return;
+  const records = getRecords().filter(r=>r.id!==id);
+  saveRecords(records);
+  renderRecords();
+  updateTotalEarnings();
+  showToast('已删除');
+}
+
+function renderRecords(){
+  let records = getRecords();
+  const filterDriver = document.getElementById('filterDriver').value;
+  const filterDate = document.getElementById('filterDate').value;
+
+  if(filterDriver) records = records.filter(r=>r.name===filterDriver);
+  if(filterDate) records = records.filter(r=>r.date===filterDate);
+
+  records.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+
+  const container = document.getElementById('recordList');
+  if(records.length===0){
+    container.innerHTML = '<div class="empty">暂无记录</div>';
+    return;
+  }
+  container.innerHTML = records.map(r=>`
+    <div class="record-item">
+      <div class="record-info">
+        <div class="record-name">${r.name}</div>
+        <div class="record-detail">${r.date} · ${r.trips}车</div>
+      </div>
+      <div class="record-amount">¥${r.amount.toFixed(0)}</div>
+      <div class="record-del" onclick="deleteRecord(${r.id})" title="删除">×</div>
+    </div>
+  `).join('');
+}
+
+function clearFilter(){
+  document.getElementById('filterDriver').value='';
+  document.getElementById('filterDate').value='';
+  renderRecords();
+}
+
+// ===== 汇总 =====
+function renderSummary(){
+  const records = getRecords();
+  const container = document.getElementById('summaryContent');
+  if(records.length===0){
+    container.innerHTML = '<div class="empty">暂无数据</div>';
+    return;
+  }
+
+  // 按人汇总
+  const byPerson = {};
+  records.forEach(r=>{
+    if(!byPerson[r.name]) byPerson[r.name] = {trips:0,amount:0};
+    byPerson[r.name].trips += r.trips;
+    byPerson[r.name].amount += r.amount;
+  });
+
+  // 本月汇总
+  const now = new Date();
+  const thisMonth = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const monthRecords = records.filter(r=>r.date.startsWith(thisMonth));
+  const monthTotal = monthRecords.reduce((s,r)=>s+r.amount,0);
+  const monthTrips = monthRecords.reduce((s,r)=>s+r.trips,0);
+
+  // 全部汇总
+  const allTotal = records.reduce((s,r)=>s+r.amount,0);
+  const allTrips = records.reduce((s,r)=>s+r.trips,0);
+
+  let html = '';
+
+  // 本月概览
+  html += '<div class="summary-block"><h3>📅 本月概览（'+thisMonth+'）</h3>';
+  html += '<div class="summary-row"><span>总车次</span><span>'+monthTrips+' 车</span></div>';
+  html += '<div class="summary-row total"><span>本月合计</span><span>¥'+monthTotal.toFixed(0)+'</span></div>';
+  html += '</div>';
+
+  // 按人汇总
+  html += '<div class="summary-block"><h3>👤 按司机汇总（全部）</h3>';
+  Object.entries(byPerson).sort((a,b)=>b[1].amount-a[1].amount).forEach(([name,data])=>{
+    html += '<div class="summary-row"><span>'+name+'</span><span>'+data.trips+'车 · ¥'+data.amount.toFixed(0)+'</span></div>';
+  });
+  html += '<div class="summary-row total"><span>全部合计</span><span>'+allTrips+'车 · ¥'+allTotal.toFixed(0)+'</span></div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function updateTotalEarnings(){
+  const now = new Date();
+  const thisMonth = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const records = getRecords();
+  const monthTotal = records.filter(r=>r.date.startsWith(thisMonth)).reduce((s,r)=>s+r.amount,0);
+  document.getElementById('totalEarnings').textContent = '本月合计：¥'+monthTotal.toFixed(0);
+}
+
+// ===== 导出CSV =====
+function exportCSV(){
+  const records = getRecords();
+  if(records.length===0){showToast('没有记录可导出');return}
+  records.sort((a,b)=>a.date.localeCompare(b.date));
+  let csv = '﻿日期,司机,车次,金额(元)\n';
+  records.forEach(r=>{
+    csv += r.date+','+r.name+','+r.trips+','+r.amount+'\n';
+  });
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '货运记账_'+new Date().toISOString().split('T')[0]+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('已下载，用Excel或WPS打开');
+}
+
+function showToast(msg){
+  const existing = document.querySelector('.toast');
+  if(existing) existing.remove();
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2000);
+}
+
+// 语音按钮：点击切换开始/停止
+document.getElementById('voiceBtn').addEventListener('click', toggleVoice);
+
+</script>
+</body>
+</html>
